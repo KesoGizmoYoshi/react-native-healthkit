@@ -746,57 +746,77 @@ class ReactNativeHealthkit: RCTEventEmitter {
   }
 
   @objc(subscribeToObserverQuery:resolve:reject:)
-  func subscribeToObserverQuery(
-    typeIdentifier: String,
-    resolve: @escaping RCTPromiseResolveBlock,
-    reject: @escaping RCTPromiseRejectBlock
-  ) {
-    guard let store = _store else {
-      return reject(INIT_ERROR, INIT_ERROR_MESSAGE, nil)
-    }
+func subscribeToObserverQuery(
+  typeIdentifier: String,
+  resolve: @escaping RCTPromiseResolveBlock,
+  reject: @escaping RCTPromiseRejectBlock
+) {
+  print("subscribeToObserverQuery called with typeIdentifier: \(typeIdentifier)")
 
-    guard let sampleType = sampleTypeFromString(typeIdentifier: typeIdentifier) else {
-      return reject(TYPE_IDENTIFIER_ERROR, "Failed to initialize " + typeIdentifier, nil)
-    }
-
-    let predicate = HKQuery.predicateForSamples(
-      withStart: Date.init(),
-      end: nil,
-      options: HKQueryOptions.strictStartDate
-    )
-
-    let queryId = UUID().uuidString
-
-    func responder(query: HKObserverQuery, handler: @escaping HKObserverQueryCompletionHandler, error: Error?) {
-      if error == nil {
-        DispatchQueue.main.async {
-          if self.bridge != nil && self.bridge.isValid {
-            self.sendEvent(withName: "onChange", body: [
-              "typeIdentifier": typeIdentifier
-            ])
-          }
-
-        }
-        handler()
-      }
-    }
-
-    let query = HKObserverQuery(
-      sampleType: sampleType,
-      predicate: predicate
-    ) { (query: HKObserverQuery, handler: @escaping HKObserverQueryCompletionHandler, error: Error?) in
-      guard let err = error else {
-        return responder(query: query, handler: handler, error: error)
-      }
-      reject(GENERIC_ERROR, err.localizedDescription, err)
-    }
-
-    store.execute(query)
-
-    self._runningQueries.updateValue(query, forKey: queryId)
-
-    resolve(queryId)
+  guard let store = _store else {
+    print("Error: HealthKit store is not initialized.")
+    return reject(INIT_ERROR, INIT_ERROR_MESSAGE, nil)
   }
+  
+  print("HealthKit store initialized successfully.")
+
+  guard let sampleType = sampleTypeFromString(typeIdentifier: typeIdentifier) else {
+    print("Error: Failed to initialize sampleType from typeIdentifier: \(typeIdentifier)")
+    return reject(TYPE_IDENTIFIER_ERROR, "Failed to initialize " + typeIdentifier, nil)
+  }
+  
+  print("Sample type successfully initialized: \(sampleType)")
+
+  let predicate = HKQuery.predicateForSamples(
+    withStart: Date.init(),
+    end: nil,
+    options: HKQueryOptions.strictStartDate
+  )
+  print("Predicate created with start date: \(Date())")
+
+  let queryId = UUID().uuidString
+  print("Generated query ID: \(queryId)")
+
+  func responder(query: HKObserverQuery, handler: @escaping HKObserverQueryCompletionHandler, error: Error?) {
+    if let error = error {
+      print("Error in responder: \(error.localizedDescription)")
+    } else {
+      print("Responder called successfully, no error.")
+      DispatchQueue.main.async {
+        if self.bridge != nil && self.bridge.isValid {
+          print("Bridge is valid, sending event to React Native.")
+          self.sendEvent(withName: "onChange", body: [
+            "typeIdentifier": typeIdentifier
+          ])
+        } else {
+          print("Error: Bridge is nil or invalid.")
+        }
+      }
+      handler()
+    }
+  }
+
+  let query = HKObserverQuery(
+    sampleType: sampleType,
+    predicate: predicate
+  ) { (query: HKObserverQuery, handler: @escaping HKObserverQueryCompletionHandler, error: Error?) in
+    if let err = error {
+      print("Error occurred during HKObserverQuery execution: \(err.localizedDescription)")
+      return reject(GENERIC_ERROR, err.localizedDescription, err)
+    }
+    print("HKObserverQuery executed successfully, calling responder.")
+    responder(query: query, handler: handler, error: error)
+  }
+
+  print("Executing HealthKit query.")
+  store.execute(query)
+  
+  self._runningQueries.updateValue(query, forKey: queryId)
+  print("Query added to running queries with ID: \(queryId)")
+
+  resolve(queryId)
+  print("Resolved with query ID: \(queryId)")
+}
 
   @objc(unsubscribeQuery:resolve:reject:)
   func unsubscribeQuery(
